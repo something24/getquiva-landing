@@ -490,6 +490,28 @@
         }
         .raffle .hero-fine-print { color: rgba(255,255,255,0.55); }
         .raffle .hero-fine-print strong { color: rgba(255,255,255,0.8); }
+
+        /* ---- Consent checkbox ---- */
+        .consent-label {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            width: 100%;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            margin-top: 4px;
+            order: 3;
+            flex-basis: 100%;
+        }
+        .consent-label input[type="checkbox"] {
+            accent-color: var(--blue);
+            width: 16px;
+            height: 16px;
+            margin-top: 1px;
+            flex-shrink: 0;
+        }
+        .raffle .consent-label { color: rgba(255,255,255,0.55); }
         .raffle-details {
             display: flex;
             justify-content: center;
@@ -702,9 +724,13 @@
         <p class="fade-up delay-2">
             Quiva turns any YouTube video into AI summaries, key timestamps, and interactive mind maps — in seconds.
         </p>
-        <form class="email-form fade-up delay-3" id="hero-form" onsubmit="return handleSubmit(event, 'hero')">
+        <form class="email-form fade-up delay-3" id="hero-form" onsubmit="return handleSubmit(event, 'hero')" style="flex-wrap:wrap;">
             <input type="email" placeholder="Enter your email" required aria-label="Email address">
             <button type="submit">Enter Raffle</button>
+            <label class="consent-label">
+                <input type="checkbox" name="marketing_consent">
+                I agree to receive occasional updates about Quiva. You can unsubscribe anytime.
+            </label>
         </form>
         <div class="form-success" id="hero-success">
             <div class="checkmark">&#10003;</div>
@@ -893,9 +919,13 @@
         <p class="section-subtitle fade-up">
             We're giving away <strong>50 annual Pro subscriptions</strong> to celebrate our launch. Enter your email for a chance to win unlimited summaries, mind map exports, text-to-speech, and more.
         </p>
-        <form class="email-form fade-up" id="raffle-form" onsubmit="return handleSubmit(event, 'raffle')">
+        <form class="email-form fade-up" id="raffle-form" onsubmit="return handleSubmit(event, 'raffle')" style="flex-wrap:wrap;">
             <input type="email" placeholder="your@email.com" required aria-label="Email address">
             <button type="submit">Enter to Win</button>
+            <label class="consent-label">
+                <input type="checkbox" name="marketing_consent">
+                I agree to receive occasional updates about Quiva. You can unsubscribe anytime.
+            </label>
         </form>
         <div class="form-success" id="raffle-success">
             <div class="checkmark">&#10003;</div>
@@ -956,20 +986,66 @@
 
     document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
 
-    // Form handler (placeholder — wire to your backend / Mailchimp / etc.)
-    function handleSubmit(e, formId) {
+    // Raffle form handler
+    const API_BASE = 'https://web-production-29de.up.railway.app';
+    const API_KEY = '91975db9fdad16709b0139bc458116bc8c7261babc52cab2dfbec0828e7fd231';
+
+    async function handleSubmit(e, formId) {
         e.preventDefault();
         const form = document.getElementById(formId + '-form');
         const success = document.getElementById(formId + '-success');
         const email = form.querySelector('input[type="email"]').value;
+        const consent = form.querySelector('input[name="marketing_consent"]');
+        const button = form.querySelector('button');
+        const originalText = button.textContent;
 
-        // TODO: Send email to your backend / email service
-        console.log('Raffle entry:', email);
+        button.textContent = 'Submitting...';
+        button.disabled = true;
 
+        try {
+            const response = await fetch(API_BASE + '/raffle', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': API_KEY
+                },
+                body: JSON.stringify({
+                    email: email,
+                    marketing_consent: consent ? consent.checked : false,
+                    source: formId
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                showSuccess(formId);
+            } else if (response.status === 409) {
+                // Already entered — treat as success
+                success.querySelector('h3').textContent = 'Already entered!';
+                success.querySelector('p').textContent = 'This email is already in the raffle. Good luck!';
+                showSuccess(formId);
+            } else {
+                alert(data.error || 'Something went wrong. Please try again.');
+                button.textContent = originalText;
+                button.disabled = false;
+            }
+        } catch (err) {
+            alert('Network error. Please check your connection and try again.');
+            button.textContent = originalText;
+            button.disabled = false;
+        }
+
+        return false;
+    }
+
+    function showSuccess(formId) {
+        const form = document.getElementById(formId + '-form');
+        const success = document.getElementById(formId + '-success');
         form.style.display = 'none';
         success.classList.add('visible');
 
-        // Also hide the other form if both exist
+        // Also update the other form
         const otherId = formId === 'hero' ? 'raffle' : 'hero';
         const otherForm = document.getElementById(otherId + '-form');
         const otherSuccess = document.getElementById(otherId + '-success');
@@ -977,8 +1053,6 @@
             otherForm.style.display = 'none';
             otherSuccess.classList.add('visible');
         }
-
-        return false;
     }
 </script>
 
